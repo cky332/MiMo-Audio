@@ -86,7 +86,7 @@ class TokenizerConfig:
             encoder_skip_layer_id=1,
             num_quantizers=4,
             codebook_sizes=(64, 64, 16, 16),
-            threshold_ema_dead_code=0,
+            threshold_ema_dead_code=2,
             decoder_layers=2,
             decoder_ffn_dim=128,
             decoder_heads=4,

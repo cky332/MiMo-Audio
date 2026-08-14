@@ -1,0 +1,53 @@
+
+=== E1.1 MiMoSampler.top_k at batch size > 1 ===
+OBSERVED B=1: works, token=59
+OBSERVED B=2: RuntimeError -> The size of tensor a (100) must match the size of tensor b (2) at non-singleton dimension 1
+OBSERVED B=2,V=2 (shape coincidence): returns [0, 0], correct is [1, 0] -> SILENTLY WRONG
+
+=== E1.2 MiMoSampler.top_p vs reference nucleus filter (B=1) ===
+OBSERVED: 0/500 mismatches vs reference nucleus masking
+
+=== E1.3 MiMoStopper: detection position, latency and batching ===
+OBSERVED stop token in final patch:      is_done=True
+OBSERVED stop token one patch earlier:   is_done=False  (single-position check: an already-passed stop is never seen)
+OBSERVED same stop but min_length=10:    is_done=False
+OBSERVED B=2, stop only in row 1:        is_done=[False, False]  (row 0 decides for the whole batch)
+
+=== E1.4a Official model, default fp32 load -> hardcoded bf16 buffer ===
+Sliding Window Attention is enabled but not implemented for `sdpa`; unexpected results may be encountered.
+OBSERVED: fp32 generate RUNS -- the hardcoded bf16 buffer silently downcasts fp32 embeddings (precision loss), then RMSNorm promotes back to fp32.
+
+=== E1.4b Same model cast to bf16 (the only supported dtype) ===
+OBSERVED: generation works, 3 new patches, output len 120
+
+=== E1.4c generate() with default global_sampler=None ===
+OBSERVED: AttributeError -> 'NoneType' object has no attribute 'sample'
+
+=== E1.4d generate() with batch size 2 ===
+OBSERVED: no crash; generated text rows row0=[29, 45, 51] row1=[50, 50, 50] (row 1's text/speech branch is decided by row 0: `next_text_tokens[0]`)
+
+=== E1.5 Official local_forward delay schedule vs Eq.15 staircase ===
+OBSERVED call sequence (vocab sizes): [17, 17, 19, 17, 19, 9, 17, 19, 9, 11, 19, 9, 11, 9, 11, 11]
+Eq.15 staircase prediction:           [17, 17, 19, 17, 19, 9, 17, 19, 9, 11, 19, 9, 11, 9, 11, 11]
+MATCH: True; emitted patch shape (1, 4, 4); empty ids present: False
+
+=== E1.6 Official patch encoder causality flag (paper says bidirectional) ===
+OBSERVED effect of perturbing frame 3 on frame 0's encoding:
+  default config (input_full_attention=None): delta=0.000000  -> CAUSAL
+  input_full_attention=True:                  delta=0.011719  -> bidirectional
+
+=== E1.7 InputSegment / StreamingInputSegment format behaviour ===
+OBSERVED text segment 'abc' -> shape (5, 12); text row: [17, -100, -100, -100, 18, -100, -100, -100, 19, -100, -100, -100]
+  (each text token occupies 4 slots, filler is -100, not the empty id)
+OBSERVED audio segment (2 patches) -> shape (5, 16); text row: [50, -100, -100, -100, 55, -100, -100, -100, 55, -100, -100, -100, 51, -100, -100, -100] (sosp/eosp patches added)
+OBSERVED non-divisible audio: bare AssertionError -> 'Audio shape torch.Size([4, 5]) is not divisible by group_size 4'
+OBSERVED streaming interleave, 23 patch positions: TTTTTTAAAAATTTTTAAATTTT
+  (T=text-ish token, A=audio position; pattern = sostm | 5T 5A 5T 3A | leftover text+eot | eostm)
+OBSERVED empty text with audio: accepted
+
+=== E1.8 Stop granularity: audio can only end on a 640 ms patch boundary ===
+OBSERVED generated text channel per patch: [55, 55, 53]
+  2 speech patches (= 8 frames) then stop patch; the <|eostm|> itself consumes a full patch of 4 frames (160 ms) filled with empty audio ids
+  audio frames emitted: 8, minimum audio granularity = 4 frames = 160 ms
+
+All Track 1 experiments done.

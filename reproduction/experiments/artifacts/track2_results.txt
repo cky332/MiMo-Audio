@@ -1,0 +1,32 @@
+long recording: 56.2 s
+
+=== E2.2 Independent-segment ENCODING vs whole-signal encoding ===
+token count: full=1405 segmented=1405 (drift = 0 tokens from per-segment conv padding)
+bucket (dist to seam, tokens)       mismatch q0  q0-3 mean feat delta
+  0-1 (<=80 ms)                           3.0%     37.9%     0.0770   (n=33)
+  2-4                                     0.0%     21.6%     0.0277   (n=66)
+  5-12                                    2.8%     24.6%     0.0298   (n=176)
+  13-39                                   1.7%     23.7%     0.0269   (n=584)
+  >=40 (interior)                         4.6%     27.5%     0.0282   (n=546)
+  (feat delta = relative L2 change of the pre-RVQ encoder feature; with the paper's
+   bidirectional 32-layer encoder the whole segment is one attention context, so any
+   nonzero delta is content the two encodings genuinely disagree on)
+
+=== E2.3 Independent-segment DECODING seams (official forward(), no overlap) ===
+overall mel-L1 (full-decode vs segment-decode): 0.4186
+waveform MSE between the two decodes, 100 ms windows:
+  at seams:    0.00156   (n=22)
+  interior:    0.00058   (n=539)
+  seam/interior ratio: 2.7x
+first-difference at seam junctions (segment decode): mean 0.0362 vs whole-signal median step 0.0022
+
+=== E2.4 group_size padding distortion on real clips (preprocess_input L271-277) ===
+15 real clips: pad frames distribution {0:3, 1:6, 2:3, 3:3}
+duration change after tokenize(+pad)->decode: min +21 ms, max +160 ms, mean +85 ms
+  (padding repeats the LAST frame 1-3 times: up to 120 ms of frozen spectrum appended,
+   and every clip's length is quantized to the 160 ms patch grid)
+
+=== E2.5 Official token-length formula vs actual conv arithmetic ===
+mel lengths 1..199: 0 mismatches between get_output_length and the real convs (formula is consistent)
+
+Track 2 done.

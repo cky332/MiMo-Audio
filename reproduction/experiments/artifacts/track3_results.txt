@@ -1,0 +1,33 @@
+=== E3.0 EMA-RVQ collapse without the official (unmentioned) stabilizers ===
+  plain EMA-VQ (paper text only)  : recon  5.234  q0-3 entropy ['-0.00', '-0.00', '-0.00', '-0.00'] bit  unique [1, 1, 1, 1]
+  official recipe (kmeans + expiry): recon  4.443  q0-3 entropy ['1.25', '3.96', '3.27', '3.18'] bit  unique [4, 30, 15, 12]
+  (entropy near 0 / 1 unique code = collapsed codebook)
+
+signal                 recon mel-L1  q0 entropy q0 top-code  uniq q0
+speech (held-out)             0.894     1.85 bit      49.0%        5
+speech -40 dB                 1.916     0.14 bit      98.0%        2
+speech clipped 5x             1.000     2.24 bit      35.3%        6
+speech + DC 0.5               1.005     1.85 bit      49.0%        5
+speech 16k-as-24k             0.919     1.41 bit      64.7%        5
+silence                      13.893     0.14 bit      98.0%        2
+white noise                   2.484     0.14 bit      98.0%        2
+pink noise                    0.958     0.28 bit      96.1%        3
+pure tone 440 Hz              2.643     0.14 bit      98.0%        2
+chirp 0.1-8 kHz               1.761     0.14 bit      98.0%        2
+3-note chord                  3.185     0.14 bit      98.0%        2
+
+(q0 codebook size 64 -> max entropy 6.0 bit; 'top-code' = share of frames mapped to the single most frequent code)
+
+relative degradation vs held-out speech:
+  speech -40 dB          recon  2.14x   entropy  0.14 bit   top-code  98.0%
+  speech clipped 5x      recon  1.12x   entropy  2.24 bit   top-code  35.3%
+  speech + DC 0.5        recon  1.12x   entropy  1.85 bit   top-code  49.0%
+  speech 16k-as-24k      recon  1.03x   entropy  1.41 bit   top-code  64.7%
+  silence                recon 15.54x   entropy  0.14 bit   top-code  98.0%
+  white noise            recon  2.78x   entropy  0.14 bit   top-code  98.0%
+  pink noise             recon  1.07x   entropy  0.28 bit   top-code  96.1%
+  pure tone 440 Hz       recon  2.96x   entropy  0.14 bit   top-code  98.0%
+  chirp 0.1-8 kHz        recon  1.97x   entropy  0.14 bit   top-code  98.0%
+  3-note chord           recon  3.56x   entropy  0.14 bit   top-code  98.0%
+
+Track 3 done.
