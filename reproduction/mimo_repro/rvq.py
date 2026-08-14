@@ -14,14 +14,36 @@ import torch.nn.functional as F
 from torch import nn
 
 
+def _kmeans(samples: torch.Tensor, k: int, iters: int = 10) -> torch.Tensor:
+    means = samples[torch.randperm(samples.shape[0])[:k]] if samples.shape[0] >= k \
+        else samples[torch.randint(0, samples.shape[0], (k,))]
+    for _ in range(iters):
+        dist = (samples.pow(2).sum(1, keepdim=True) - 2 * samples @ means.t()
+                + means.pow(2).sum(1)[None, :])
+        buckets = dist.argmin(dim=-1)
+        bins = torch.bincount(buckets, minlength=k).clamp_min(1)
+        new = torch.zeros_like(means).index_add_(0, buckets, samples) / bins[:, None]
+        means = torch.where((torch.bincount(buckets, minlength=k) == 0)[:, None], means, new)
+    return means
+
+
 class EMACodebook(nn.Module):
-    def __init__(self, dim: int, codebook_size: int, decay: float = 0.99, epsilon: float = 1e-5):
+    """EMA codebook.  `kmeans_init` and `threshold_ema_dead_code` mirror the
+    stabilizers in the official quantization.py (kmeans_init=True,
+    threshold_ema_dead_code=10 in the released config); without them the EMA
+    codebook collapses on real speech -- see experiments/exp_track3_ood.py."""
+
+    def __init__(self, dim: int, codebook_size: int, decay: float = 0.99,
+                 epsilon: float = 1e-5, kmeans_init: bool = False,
+                 threshold_ema_dead_code: int = 0):
         super().__init__()
         self.codebook_size = codebook_size
         self.decay = decay
         self.epsilon = epsilon
-        embed = torch.empty(codebook_size, dim)
-        nn.init.kaiming_uniform_(embed)
+        self.threshold_ema_dead_code = threshold_ema_dead_code
+        embed = torch.zeros(codebook_size, dim) if kmeans_init \
+            else nn.init.kaiming_uniform_(torch.empty(codebook_size, dim))
+        self.register_buffer("inited", torch.tensor(not kmeans_init))
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
         self.register_buffer("cluster_size", torch.zeros(codebook_size))
@@ -39,10 +61,25 @@ class EMACodebook(nn.Module):
         return F.embedding(indices, self.embed)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.training and not self.inited:
+            with torch.no_grad():
+                init = _kmeans(x.detach(), self.codebook_size)
+                self.embed.copy_(init)
+                self.embed_avg.copy_(init)
+                self.cluster_size.fill_(1.0)
+                self.inited.fill_(True)
         indices = self.encode(x)
         quantized = self.decode(indices)
         if self.training:
             with torch.no_grad():
+                # dead-code expiry BEFORE the EMA update, as in the official code
+                if self.threshold_ema_dead_code > 0:
+                    dead = self.cluster_size < self.threshold_ema_dead_code
+                    if dead.any():
+                        replace = x[torch.randint(0, x.shape[0], (int(dead.sum()),))]
+                        self.embed[dead] = replace
+                        self.embed_avg[dead] = replace
+                        self.cluster_size[dead] = self.threshold_ema_dead_code
                 onehot = F.one_hot(indices, self.codebook_size).type_as(x)
                 self.cluster_size.mul_(self.decay).add_(onehot.sum(0), alpha=1 - self.decay)
                 embed_sum = onehot.t() @ x
@@ -60,10 +97,13 @@ class EMACodebook(nn.Module):
 class ResidualVQ(nn.Module):
     """RVQ over a list of codebook sizes (paper: 20 layers, 2x1024 + 18x128)."""
 
-    def __init__(self, dim: int, codebook_sizes, decay: float = 0.99):
+    def __init__(self, dim: int, codebook_sizes, decay: float = 0.99,
+                 kmeans_init: bool = False, threshold_ema_dead_code: int = 0):
         super().__init__()
         self.layers = nn.ModuleList(
-            EMACodebook(dim, size, decay=decay) for size in codebook_sizes
+            EMACodebook(dim, size, decay=decay, kmeans_init=kmeans_init,
+                        threshold_ema_dead_code=threshold_ema_dead_code)
+            for size in codebook_sizes
         )
 
     def forward(self, x: torch.Tensor, n_q: int | None = None):

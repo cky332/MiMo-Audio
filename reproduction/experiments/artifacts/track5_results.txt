@@ -1,0 +1,27 @@
+=== E5.1 What fits in the 8192-position context ===
+1 position = 160 ms audio or 1 text token; cap = 8192 positions
+pure audio ceiling: 1311 s = 21.8 min
+dialogue round ( 5s user + 10s reply + 35 transcript tokens):  149 positions -> context full after 54 rounds (~14 min of conversation)
+dialogue round (10s user + 20s reply + 70 transcript tokens):  277 positions -> context full after 29 rounds (~14 min of conversation)
+dialogue round (30s user + 60s reply + 210 transcript tokens):  792 positions -> context full after 10 rounds (~15 min of conversation)
+
+text-vs-audio exchange rate: 1 s of speech costs 6.25 positions;
+a typical 15-token spoken sentence (~4 s) costs 25 audio positions vs 15 text positions
+history replay (message_list mode) re-tokenizes every prior audio turn on every call:
+  round  5: audio re-encoded so far ~10x one turn's cost (quadratic)
+  round 10: audio re-encoded so far ~45x one turn's cost (quadratic)
+  round 20: audio re-encoded so far ~190x one turn's cost (quadratic)
+
+=== E5.2 Patch-decoder conditioning capacity ===
+audio content per patch: 4 frames x 62 bit = 248 bit
+conditioning channel: one 1024-dim bf16 vector = 16384 raw bit (66x the content) -> the bottleneck is representational,
+not information-theoretic (track 4 E4.1 measures the realized gap)
+
+=== E5.3 Decode chunking at deployment scale ===
+official forward() decodes generated audio in independent 1500-token (60 s) chunks
+with no overlap (mimo_audio.py L1150-1155) although streaming_decode with
+left/right overlap of 10 s / 1.6 s exists in the tokenizer -- every reply longer
+than 60 s contains hard decode seams (track 2 E2.3 quantifies them);
+encoding side likewise chunks input mel at 60 s (L258-266) with no overlap.
+
+Track 5 done.

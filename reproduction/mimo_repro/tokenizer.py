@@ -187,7 +187,10 @@ class MiMoAudioTokenizerRepro(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.encoder = TokenizerEncoder(cfg)
-        self.quantizer = ResidualVQ(cfg.d_model, cfg.codebook_sizes, decay=cfg.rvq_decay)
+        self.quantizer = ResidualVQ(
+            cfg.d_model, cfg.codebook_sizes, decay=cfg.rvq_decay,
+            kmeans_init=True, threshold_ema_dead_code=cfg.threshold_ema_dead_code,
+        )
         self.decoder = TokenizerDecoder(cfg)
         self.vocoder = TransformerVocoder(cfg)
 

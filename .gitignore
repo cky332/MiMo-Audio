@@ -8,3 +8,4 @@ checkpoints/
 *.pyd
 *.pyw
 *.pyz
+reproduction/experiments/artifacts/*.pt
