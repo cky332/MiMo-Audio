@@ -119,6 +119,10 @@ left_overlap=10s/right_overlap=1.6s 恰好等于 vocoder 的双侧感受野—�
 这个反差值得记住。base 模型的 ICL 接口（唯一支撑"few-shot learner"标题的 API）
 甚至**没有 return 语句**、默认参数会直接 TypeError（:1281-1290 `max_new_tokens=None`
 时 `prompt_length // group_size + None` 崩溃）——它显然从未被当作一等公民测试过。
+另一处与论文措辞的张力：论文 3.3.1 说 S2S few-shot 协议 "conditions **exclusively**
+on paired speech exemplars"，但代码接口要求每个示例提供 `output_transcription`
+（:1028），示例输出以"转写文本+音频"交错格式进入上下文——few-shot 示例并非纯语音，
+文本通道一直在辅助。
 
 **4.3 推理代码是演示级质量，不是基础设施级。**
 精读发现的问题（均可复核）：
